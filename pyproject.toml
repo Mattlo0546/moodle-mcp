@@ -4,8 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "moodle-mcp"
-version = "0.1.0"
-description = "MCP server that pulls courses, materials and deadlines from a Moodle site (LSE by default)"
+version = "0.2.0"
+description = "MCP server that pulls courses, materials, deadlines and lecture slides from Moodle (LSE by default)"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
     "mcp>=1.10,<2",  # FastMCP API; mcp 2.x renamed it
@@ -13,6 +15,9 @@ dependencies = [
     "beautifulsoup4>=4.12",
     "playwright>=1.45",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Mattlo0546/moodle-mcp"
 
 [project.optional-dependencies]
 test = ["pytest>=8"]

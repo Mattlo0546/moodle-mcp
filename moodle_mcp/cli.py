@@ -42,11 +42,19 @@ def cmd_courses(args) -> int:
 
 
 def cmd_sync(args) -> int:
-    from .server import moodle_sync  # reuse the tool's logic
+    from . import server  # reuse the tools' logic
     import anyio
-    rep = anyio.run(moodle_sync, args.course)
+    import time
+    rep = anyio.run(server.moodle_sync, args.course or "")
+    last = None
+    while rep.get("running"):  # every course: follow the background job
+        if rep.get("progress") != last:
+            print(rep.get("progress"), flush=True)
+            last = rep.get("progress")
+        time.sleep(1)
+        rep = anyio.run(server.moodle_sync_status)
     print(json.dumps(rep, indent=1))
-    return 0 if not rep.get("login_required") else 2
+    return 2 if rep.get("login_required") else (1 if rep.get("error") else 0)
 
 
 def main() -> None:
@@ -55,7 +63,8 @@ def main() -> None:
     sp = sub.add_parser("login"); sp.add_argument("--timeout", type=int, default=300); sp.set_defaults(fn=cmd_login)
     sub.add_parser("status").set_defaults(fn=cmd_status)
     sub.add_parser("courses").set_defaults(fn=cmd_courses)
-    sp = sub.add_parser("sync"); sp.add_argument("course"); sp.set_defaults(fn=cmd_sync)
+    sp = sub.add_parser("sync"); sp.add_argument("course", nargs="?", help="omit to pull every current course's PDFs")
+    sp.set_defaults(fn=cmd_sync)
     sub.add_parser("serve")
     args = p.parse_args()
     if args.cmd in (None, "serve"):

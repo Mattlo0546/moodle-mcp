@@ -22,8 +22,9 @@ MOBILE_SERVICE = "moodle_mobile_app"
 class Settings:
     # LSE Moodle by default; override with MOODLE_BASE_URL for any other site.
     base_url: str = "https://moodle.lse.ac.uk"
-    # Where downloaded files land: <root>/<Course short name>/<path in course>.
-    download_dir: Path = Path.home() / "MoodleFiles"
+    # Where downloaded files land: <root>/<Course short name>/<path in course>. Unless set, that's SlideMate's
+    # library (its first slides folder), so synced slides show up there; without SlideMate, ~/MoodleFiles.
+    download_dir: Path | None = None
     # The installed Google Chrome is used for the sign-in window; "" = bundled Chromium.
     browser_channel: str = "chrome"
     home: Path = HOME_DIR
@@ -45,6 +46,16 @@ class Settings:
         return f"{self.base_url}/admin/tool/mobile/launch.php"
 
 
+def slidemate_library() -> Path | None:
+    """The first slides folder in SlideMate's settings, if SlideMate is set up on this Mac."""
+    data = Path(os.environ.get("SLIDEMATE_DATA") or Path.home() / "Library/Application Support/SlideMate")
+    try:
+        roots = json.loads((data / "config.json").read_text()).get("library_roots") or []
+    except (OSError, ValueError):
+        return None
+    return next((Path(r).expanduser() for r in roots if r), None)
+
+
 def load_settings() -> Settings:
     s = Settings()
     cfg_path = HOME_DIR / "config.json"
@@ -64,5 +75,7 @@ def load_settings() -> Settings:
     if env.get("MOODLE_BROWSER_CHANNEL") is not None:
         s.browser_channel = env["MOODLE_BROWSER_CHANNEL"]
 
+    if s.download_dir is None:
+        s.download_dir = slidemate_library() or Path.home() / "MoodleFiles"
     s.home.mkdir(parents=True, exist_ok=True)
     return s
