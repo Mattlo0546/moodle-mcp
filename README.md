@@ -1,20 +1,41 @@
-# Moodle MCP
+# Moodle MCP Server: Moodle for Claude, ChatGPT Codex and Cursor
 
-An [MCP](https://modelcontextprotocol.io) server that gives AI tools ([SlideMate](https://github.com/Mattlo0546/slidemate),
-Claude Desktop, Claude Code, Codex) read-only access to a student's **Moodle**: courses, materials, links and
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![MCP](https://img.shields.io/badge/MCP-server-8A2BE2)](https://modelcontextprotocol.io)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+
+**moodle-mcp** is an open-source [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server for
+**Moodle**. It lets AI assistants (Claude Desktop, Claude Code, ChatGPT Codex, Cursor, VS Code and
+[SlideMate](https://github.com/Mattlo0546/slidemate)) read a student's Moodle courses, materials, links and
 deadlines. It can also **download every course's lecture slides** into one folder per course.
 
-It defaults to **LSE Moodle** (`https://moodle.lse.ac.uk`) but works with any Moodle site: set `MOODLE_BASE_URL`.
-It uses Moodle's official mobile web-services API (the one the Moodle app uses), so it reads data rather than
-scraping pages, and sign-in goes through your university's normal SSO + MFA in a real browser window.
+- **Works at any university that uses Moodle**, including UCL, King's College London (KEATS), LSE, Cambridge
+  and Warwick ([full list](#universities-that-use-moodle)). It defaults to LSE (`moodle.lse.ac.uk`); set
+  `MOODLE_BASE_URL` for anywhere else.
+- **Uses Moodle's official mobile-app API** (the one the Moodle app uses), so it reads data rather than scraping
+  pages.
+- **No password or token to copy.** You sign in through your university's normal SSO and MFA in a real browser
+  window.
+- **Read-only.** It can't submit work, post or change anything on Moodle.
 
-## Install (macOS, one command)
+> Using Canvas or Blackboard instead? See [canvas-mcp](https://github.com/Mattlo0546/canvas-mcp) (Oxford, Harvard,
+> Stanford…) and [blackboard-mcp](https://github.com/Mattlo0546/blackboard-mcp) (Imperial, Edinburgh, Bristol…).
+
+## What you can ask
+
+- *"What's due on Moodle this week?"*
+- *"Show me what's in week 4 of MY452."*
+- *"Pull everything from MY452."*
+- *"Download the lecture slides from all my current modules."*
+
+## Install (macOS / Linux, one command)
 
 Paste this into Terminal. It installs [uv](https://docs.astral.sh/uv/) (which brings its own Python, so you don't
-need Xcode or Apple's Command Line Tools), installs `moodle-mcp`, then opens Chrome so you can sign in to Moodle once:
+need Xcode or Apple's Command Line Tools), installs `moodle-mcp`, then opens Chrome so you can sign in to Moodle once.
+Change `moodle.ucl.ac.uk` to your university's Moodle address:
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.local/bin/uv tool install --managed-python https://github.com/Mattlo0546/moodle-mcp/archive/refs/heads/main.zip && ~/.local/bin/moodle-mcp login
+curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.local/bin/uv tool install --managed-python https://github.com/Mattlo0546/moodle-mcp/archive/refs/heads/main.zip && MOODLE_BASE_URL=moodle.ucl.ac.uk ~/.local/bin/moodle-mcp login
 ```
 
 Sign-in uses Google Chrome. Without Chrome, run `~/.local/share/uv/tools/moodle-mcp/bin/playwright install chromium`
@@ -35,38 +56,69 @@ first. To update later, run the install command again with `--reinstall` after `
 Courses can be named loosely: `"MY452"`, `"regression"` or the course id all work. A full sync skips courses that
 have ended, and files you already have.
 
-## Use it
+## Connect it to your AI app
 
-### [SlideMate](https://github.com/Mattlo0546/slidemate)
+Set `MOODLE_BASE_URL` to your university's Moodle address in each config below.
 
-Settings → **Connections & sync** → *Add server…*:
+### SlideMate
 
-- **Name:** `moodle`
-- **Command:** `moodle-mcp`
-- **Arguments:** `serve`
-
-Press **Test**: it should list 8 tools. SlideMate notices `moodle_sync`, so the library's **Pull** button
-downloads new slides from all your current courses, and `moodle_login` is used when the sign-in has expired. Files
-go straight into SlideMate's library (its first slides folder), as `<folder>/<course>/…`, and each Moodle course
-becomes a course in SlideMate. Keep **Tutor** ticked and the tutor can check your deadlines and course pages too.
+In [SlideMate](https://github.com/Mattlo0546/slidemate), go to Settings → **Your university**, then pick your
+university or **Moodle** and press **Connect**. SlideMate installs this server, signs you in, and makes the
+library's **Pull** button download new slides from all your current courses into your library. Nothing to type.
 
 ### Claude Code
 
 ```bash
-claude mcp add moodle -- ~/.local/bin/moodle-mcp serve
+claude mcp add moodle -e MOODLE_BASE_URL=https://moodle.ucl.ac.uk -- ~/.local/bin/moodle-mcp serve
 ```
 
-### Claude Desktop / other MCP clients
+### Claude Desktop
+
+Settings → Developer → Edit Config (`claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
-    "moodle": { "command": "/Users/YOU/.local/bin/moodle-mcp", "args": ["serve"] }
+    "moodle": {
+      "command": "/Users/YOU/.local/bin/moodle-mcp",
+      "args": ["serve"],
+      "env": { "MOODLE_BASE_URL": "https://moodle.ucl.ac.uk" }
+    }
   }
 }
 ```
 
-Then ask things like *"what's due this week on Moodle?"* or *"pull everything from MY452"*.
+The same block works in Cursor (`~/.cursor/mcp.json`). VS Code's `.vscode/mcp.json` uses `"servers"` in place of
+`"mcpServers"`.
+
+### ChatGPT Codex CLI
+
+```bash
+codex mcp add moodle --env MOODLE_BASE_URL=https://moodle.ucl.ac.uk -- ~/.local/bin/moodle-mcp serve
+```
+
+## Universities that use Moodle
+
+Any Moodle site with the mobile app service turned on works. Most have it on, because that's what the official
+Moodle app needs. These addresses were checked to be Moodle sites:
+
+| University | `MOODLE_BASE_URL` |
+| --- | --- |
+| UCL (University College London) | `moodle.ucl.ac.uk` |
+| King's College London (KEATS) | `keats.kcl.ac.uk` |
+| London School of Economics (LSE) | `moodle.lse.ac.uk` |
+| University of Cambridge | `www.vle.cam.ac.uk` |
+| University of Warwick | `moodle.warwick.ac.uk` |
+| Queen Mary University of London (QMplus) | `qmplus.qmul.ac.uk` |
+| Royal Holloway, University of London | `moodle.royalholloway.ac.uk` |
+| University of Bath | `moodle.bath.ac.uk` |
+| University of Nottingham | `moodle.nottingham.ac.uk` |
+| University of Glasgow | `moodle.gla.ac.uk` |
+| University of Exeter | `vle.exeter.ac.uk` |
+| Loughborough University (Learn) | `learn.lboro.ac.uk` |
+| University of Hong Kong | `moodle.hku.hk` |
+
+Your university's address is the one in your browser's address bar when you open Moodle.
 
 ## Command line
 
@@ -96,6 +148,23 @@ mobile-app login handshake: it opens `admin/tool/mobile/launch.php` with a rando
 browser, and Moodle redirects back with a signed, base64-encoded web-service token, which is decoded and saved. The
 browser profile remembers the SSO session, so later refreshes usually need no clicks.
 
+## FAQ
+
+**Is there an MCP server for UCL Moodle or King's KEATS?**
+Yes, this one. Set `MOODLE_BASE_URL` to `moodle.ucl.ac.uk` or `keats.kcl.ac.uk`. In SlideMate, pick UCL or King's
+from the list.
+
+**Do I need a Moodle API token?**
+No. `moodle_login` gets one through Moodle's mobile-app sign-in, after you sign in with your university account.
+
+**Does it work with ChatGPT?**
+It works with OpenAI's Codex CLI and with any app that supports local (stdio) MCP servers. The ChatGPT website can
+only use remote MCP servers.
+
+**It says the site doesn't allow the mobile app.**
+Your Moodle has the mobile web service turned off, so this server can't sign in. Only your university's Moodle
+admins can turn it on.
+
 ## Privacy
 
 - **Access:** read-only. It can't submit work, post or change anything on Moodle.
@@ -108,4 +177,12 @@ browser profile remembers the SSO session, so later refreshes usually need no cl
 uv run --with pytest pytest     # offline tests against a fake Moodle: sync, sign-in expiry, MCP over stdio
 ```
 
-MIT licensed.
+## Related
+
+- [canvas-mcp](https://github.com/Mattlo0546/canvas-mcp): MCP server for Canvas LMS
+- [blackboard-mcp](https://github.com/Mattlo0546/blackboard-mcp): MCP server for Blackboard Learn (Ultra)
+- [classroom-mcp](https://github.com/Mattlo0546/classroom-mcp): MCP server for Google Classroom
+- [SlideMate](https://github.com/Mattlo0546/slidemate): a free Mac app with an AI tutor that has read your whole
+  lecture deck. It sets all of these up in one click.
+
+MIT licensed. Not affiliated with Moodle Pty Ltd or any university. Moodle is a trademark of Moodle Pty Ltd.

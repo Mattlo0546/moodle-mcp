@@ -1,0 +1,17 @@
+# moodle-mcp
+
+> Open-source MCP (Model Context Protocol) server for Moodle. It gives AI assistants (Claude Desktop, Claude Code, ChatGPT Codex CLI, Cursor, VS Code, SlideMate) read-only access to a student's Moodle courses, materials, links and deadlines, and downloads lecture slides. Uses Moodle's official mobile web-services API; signs in through university SSO + MFA in a browser, so no password or token is needed. Works at UCL (moodle.ucl.ac.uk), King's College London KEATS (keats.kcl.ac.uk), LSE (moodle.lse.ac.uk, the default), Cambridge, Warwick, QMUL, Bath, Nottingham, Glasgow and any Moodle site via MOODLE_BASE_URL. Python, MIT licence.
+
+## Docs
+- [README](https://github.com/Mattlo0546/moodle-mcp/blob/main/README.md): install, client configs, tools, universities, FAQ
+
+## Tools
+- moodle_login, moodle_status, moodle_courses, moodle_browse, moodle_deadlines, moodle_download, moodle_sync / moodle_sync_status
+
+## Install
+- `uv tool install --managed-python https://github.com/Mattlo0546/moodle-mcp/archive/refs/heads/main.zip`, then `MOODLE_BASE_URL=<your moodle> moodle-mcp login`; run with `moodle-mcp serve` (stdio)
+
+## Related
+- [canvas-mcp](https://github.com/Mattlo0546/canvas-mcp): Canvas LMS (Oxford, Harvard, Stanford)
+- [blackboard-mcp](https://github.com/Mattlo0546/blackboard-mcp): Blackboard Learn (Imperial, Edinburgh, Bristol)
+- [SlideMate](https://github.com/Mattlo0546/slidemate): Mac app that installs these in one click
