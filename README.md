@@ -47,14 +47,19 @@ first. To update later, run the install command again with `--reinstall` after `
 | --- | --- |
 | `moodle_login` | Opens a browser for university SSO + MFA and saves a token. Tries a silent refresh first. |
 | `moodle_status` | Who you're signed in as, which site, and where files download to |
-| `moodle_courses` | Your enrolled courses, most recently used first |
+| `moodle_courses` | Your enrolled courses, most recently used first, and whether a full sync pulls each one |
+| `moodle_set_courses` | Change which courses a full sync pulls (`include` an info site it skips, `exclude` a course) |
 | `moodle_browse` | A course's sections with materials, links, activities and due dates |
 | `moodle_deadlines` | Upcoming assignments and quizzes, soonest first |
 | `moodle_download` | Save one file (a `fileurl` from `moodle_browse`) |
 | `moodle_sync` / `moodle_sync_status` | With no course: download the PDFs from every current course, in the background. With a course: download all of its files. |
 
 Courses can be named loosely: `"MY452"`, `"regression"` or the course id all work. A full sync skips courses that
-have ended, and files you already have.
+have ended, and files you already have. It also skips what isn't for studying: sites that aren't courses (guidance
+hubs, LSE Life, the library's skills site, year-group noticeboards) and, inside courses, posters, handbooks, forms,
+timetables and the "Student support" section. Its report lists the sites it skipped; `moodle_set_courses` brings one
+back. Words that are also lecture topics only count in an admin phrase, so "Mathematical induction" stays and
+"Induction week schedule" goes ([`relevance.py`](moodle_mcp/relevance.py)).
 
 ## Connect it to your AI app
 

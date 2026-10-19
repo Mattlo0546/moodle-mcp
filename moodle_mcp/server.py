@@ -10,6 +10,7 @@ from pathlib import Path
 import anyio
 from mcp.server.fastmcp import FastMCP
 
+from . import relevance
 from .auth import browser_login
 from .config import load_settings
 from .moodle import LoginRequired, Moodle, MoodleError
@@ -20,7 +21,8 @@ mcp = FastMCP(
         "Tools for the user's Moodle (LSE by default; set MOODLE_BASE_URL for another site). "
         "moodle_courses lists enrolled courses; moodle_browse shows a course's sections, materials "
         "and links; moodle_download / moodle_sync save files locally (moodle_sync with no course pulls every "
-        "current course's PDFs in the background; check moodle_sync_status); moodle_deadlines lists upcoming "
+        "current course's PDFs in the background, skipping guidance sites, posters and forms; check "
+        "moodle_sync_status; moodle_set_courses changes which courses it pulls); moodle_deadlines lists upcoming "
         "assignments and quizzes. If any tool reports that sign-in is needed, call moodle_login, which "
         "opens a browser window for the university SSO + MFA and saves a web-service token."
     ),
@@ -113,17 +115,70 @@ async def moodle_status() -> dict:
     return await _run(go)
 
 
+def _prefs_path() -> Path:
+    return _settings.home / "courses.json"
+
+
+def _prefs() -> dict:
+    try:
+        import json
+        return json.loads(_prefs_path().read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _info(c: dict) -> dict:
+    """The fields relevance.choose looks at."""
+    return {"id": c.get("id"), "name": c.get("fullname") or "", "shortname": c.get("shortname") or "",
+            "idnumber": c.get("idnumber") or "", "students": c.get("enrolledusercount") or 0, "raw": c}
+
+
+def _choose(courses: list[dict]) -> tuple[list[dict], list[dict]]:
+    keep, skipped = relevance.choose([_info(c) for c in courses], _prefs())
+    return [k["raw"] for k in keep], skipped
+
+
 @mcp.tool()
 async def moodle_courses() -> list[dict] | dict:
-    """List the user's enrolled Moodle courses (most recently accessed first)."""
+    """List the user's enrolled Moodle courses (most recently accessed first). `synced` says whether a full
+    moodle_sync pulls it; `why_not` explains a course it skips (an info site, ended, or turned off)."""
     def go():
+        cs = _mo().courses()
+        now = time.time()
+        _, skipped = _choose([c for c in cs if _current(c, now)])
+        why = {s["id"]: s["why"] for s in skipped}
         return [{
             "id": c.get("id"),
             "shortname": c.get("shortname"),
             "fullname": c.get("fullname"),
             "last_accessed": _when(c.get("lastaccess")),
             "url": f"{_settings.base_url}/course/view.php?id={c.get('id')}",
-        } for c in _mo().courses()]
+            "synced": _current(c, now) and c.get("id") not in why,
+            "why_not": why.get(c.get("id")) or ("" if _current(c, now) else "ended or hidden"),
+        } for c in cs]
+    return await _run(go)
+
+
+@mcp.tool()
+async def moodle_set_courses(include: list[str] | None = None, exclude: list[str] | None = None) -> dict:
+    """Choose which courses a full moodle_sync pulls, overriding its guess. `include`: course ids (or names) to
+    pull even though they look like an info site; `exclude`: ones to stop pulling. Saved for every later sync.
+    Passing a course in one list removes it from the other."""
+    def go():
+        import json
+        mo = _mo()
+        prefs = _prefs()
+        inc, exc = set(map(str, prefs.get("include") or [])), set(map(str, prefs.get("exclude") or []))
+        for q in include or []:
+            cid = str(mo.find_course(q)["id"])
+            inc.add(cid)
+            exc.discard(cid)
+        for q in exclude or []:
+            cid = str(mo.find_course(q)["id"])
+            exc.add(cid)
+            inc.discard(cid)
+        _prefs_path().write_text(json.dumps({"include": sorted(inc), "exclude": sorted(exc)}, indent=1))
+        return {"ok": True, "include": sorted(inc), "exclude": sorted(exc)}
     return await _run(go)
 
 
@@ -191,14 +246,19 @@ def _current(c: dict, now: float) -> bool:
 def _sync_course(mo: Moodle, c: dict, *, skip_existing: bool, pdfs_only: bool) -> dict:
     """Download a course's files to <download folder>/<course>/<path in course>/."""
     root = _settings.download_dir / _folder(c)
-    downloaded, skipped, errors = [], 0, []
+    downloaded, skipped, errors, noise = [], 0, [], 0
     for sec in mo.course_contents(c["id"]):
+        if pdfs_only and not relevance.is_study_section(sec.get("name")):
+            continue
         for m in sec.get("modules") or []:
             for cont in m.get("contents") or []:
                 if cont.get("type") != "file" or not cont.get("fileurl"):
                     continue
                 name = cont.get("filename") or "file"
                 if pdfs_only and not name.lower().endswith(".pdf"):
+                    continue
+                if pdfs_only and not relevance.is_study_file(name, m.get("name")):
+                    noise += 1  # a poster, handbook or form
                     continue
                 dest = root / (cont.get("filepath") or "/").strip("/") / name
                 if skip_existing and dest.exists() and dest.stat().st_size == (cont.get("filesize") or 0):
@@ -212,7 +272,7 @@ def _sync_course(mo: Moodle, c: dict, *, skip_existing: bool, pdfs_only: bool) -
                 except Exception as e:  # noqa: BLE001 - report per-file, keep going
                     errors.append(f"{dest.name}: {e}")
     return {"course": _folder(c), "folder": str(root), "downloaded": len(downloaded), "skipped": skipped,
-            "files": downloaded, "errors": errors}
+            "not_study": noise, "files": downloaded, "errors": errors}
 
 
 # A sync of every course runs in the background (it can take a while); moodle_sync_status reports on it.
@@ -224,7 +284,7 @@ def _sync_all(skip_existing: bool) -> None:
     try:
         mo = _mo()
         now = time.time()
-        courses = [c for c in mo.courses() if _current(c, now)]
+        courses, passed = _choose([c for c in mo.courses() if _current(c, now)])
         reports = []
         for i, c in enumerate(courses, 1):
             _job["progress"] = f"Course {i} of {len(courses)}: {_folder(c)}…"
@@ -233,11 +293,16 @@ def _sync_all(skip_existing: bool) -> None:
             except MoodleError as e:  # one course failing (e.g. no access) shouldn't stop the rest
                 reports.append({"course": _folder(c), "downloaded": 0, "skipped": 0, "files": [], "errors": [str(e)]})
         new = sum(r["downloaded"] for r in reports)
+        noise = sum(r.get("not_study", 0) for r in reports)
         errors = [f"{r['course']}: {e}" for r in reports for e in r["errors"]]
         summary = (f"{new} new PDF{'s' if new != 1 else ''} from {len(courses)} course{'s' if len(courses) != 1 else ''}"
-                   f" into {str(_settings.download_dir).replace(str(Path.home()), '~', 1)}" + (f" ({len(errors)} couldn't be downloaded)" if errors else "") + ".")
+                   f" into {str(_settings.download_dir).replace(str(Path.home()), '~', 1)}"
+                   + (f" ({len(errors)} couldn't be downloaded)" if errors else "") + "."
+                   + (f" Skipped {len(passed)} site{'s' if len(passed) != 1 else ''} that aren't courses"
+                      f" ({', '.join(p['name'] for p in passed[:3])}{'…' if len(passed) > 3 else ''})." if passed else ""))
         _job.update(report={"summary": summary, "folder": str(_settings.download_dir), "downloaded": new,
-                            "courses": reports, "errors": errors})
+                            "courses": reports, "errors": errors, "not_study_files": noise,
+                            "skipped_courses": [{"id": p["id"], "name": p["name"], "why": p["why"]} for p in passed]})
     except LoginRequired as e:
         _job.update(report={"login_required": True, "message": str(e)})
     except Exception as e:  # noqa: BLE001 - surfaced to the caller through moodle_sync_status
