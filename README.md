@@ -3,6 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-server-8A2BE2)](https://modelcontextprotocol.io)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+[![M8ven Score](https://m8ven.ai/badge/mcp/mattlo0546-moodle-mcp-1v977q?v=28369debb984625cc02b39b9640c01b6)](https://m8ven.ai/mcp/mattlo0546-moodle-mcp-1v977q?s=readme)
 
 **moodle-mcp** is an open-source [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server for
 **Moodle**. It lets AI assistants (Claude Desktop, Claude Code, ChatGPT Codex, Cursor, VS Code and
